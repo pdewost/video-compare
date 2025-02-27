@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+<!--
+  ©Philippe Dewost, 2025 — inspired by @chenyuntc, refined and enhanced with the help of Claude Sonnet 3.7
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -459,13 +462,13 @@
       
       <!-- Right video (background) -->
       <video id="right-video" muted>
-        <source src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/4273/floodplain-clean.mp4" type="video/mp4">
+        <source src="IMG_2558_1_starlight.mp4" type="video/mp4">
       </video>
       
       <!-- Clipper with left video -->
       <div id="video-clipper">
         <video id="left-video" muted>
-          <source src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/4273/floodplain-dirty.mp4" type="video/mp4">
+          <source src="IMG_2558.mov" type="video/quicktime">
         </video>
       </div>
       
@@ -498,10 +501,8 @@ https://example.com/video2.mp4, Second video
     </div>
     
     <footer>
-      <p>Video Comparison Tool • Adjust the slider to compare videos side by side</p>
-      <div class="shortcuts-panel">
-        <p>Press Space to play/pause videos • Press Home to restart videos from beginning</p>
-      </div>
+      <hr>
+      <p style="text-align: center;">©Philippe Dewost, 2025 — @pdewost on LinkedIn, X and Twitter</p>
     </footer>
   </div>
 
@@ -543,6 +544,16 @@ https://example.com/video2.mp4, Second video
       const rightVideoSelect = document.getElementById('right-video-select');
       const leftVideoInfo = document.getElementById('left-video-info');
       const rightVideoInfo = document.getElementById('right-video-info');
+      
+      // Click on container to toggle play/pause (but not when clicking on handle)
+      container.addEventListener('click', function(e) {
+        // Don't trigger play/pause if dragging or clicking on handle
+        if (isDragging || e.target === sliderHandle || sliderHandle.contains(e.target)) {
+          return;
+        }
+        
+        togglePlayPause();
+      });
       
       // State variables
       let isDragging = false;
@@ -773,9 +784,17 @@ https://example.com/video2.mp4, Second video
         populateVideoSelectors();
         videoSelector.style.display = 'flex';
         
-        // Load the first two videos as default with preloading
-        updateVideoInfo(videos[0], 'left');
-        updateVideoInfo(videos[1], 'right');
+        // Use the last played videos indexes if they're within range
+        const leftIndex = (lastPlayedVideos.left < videos.length) ? lastPlayedVideos.left : 0;
+        const rightIndex = (lastPlayedVideos.right < videos.length) ? lastPlayedVideos.right : (videos.length > 1 ? 1 : 0);
+        
+        // Update the selected values in the dropdowns
+        leftVideoSelect.value = leftIndex;
+        rightVideoSelect.value = rightIndex;
+        
+        // Update video info for the selected (last played) videos
+        updateVideoInfo(videos[leftIndex], 'left');
+        updateVideoInfo(videos[rightIndex], 'right');
       });
       
       // Populate selector dropdowns
@@ -802,6 +821,8 @@ https://example.com/video2.mp4, Second video
           leftVideoSelect.value = lastPlayedVideos.left;
         } else {
           leftVideoSelect.value = 0;
+          // Update lastPlayedVideos to match
+          lastPlayedVideos.left = 0;
         }
         
         if (lastPlayedVideos.right < videos.length && lastPlayedVideos.right !== lastPlayedVideos.left) {
@@ -810,12 +831,15 @@ https://example.com/video2.mp4, Second video
           // Use second video by default or first different video
           if (lastPlayedVideos.left === 0) {
             rightVideoSelect.value = 1;
+            lastPlayedVideos.right = 1;
           } else {
             rightVideoSelect.value = 0;
+            lastPlayedVideos.right = 0;
           }
         } else {
           // If only one video, use it for both
           rightVideoSelect.value = 0;
+          lastPlayedVideos.right = 0;
         }
         
         // Add change event listeners with full preloading
@@ -845,6 +869,10 @@ https://example.com/video2.mp4, Second video
           const leftVideoObj = videos[leftVideoSelect.value];
           const rightVideoObj = videos[rightVideoSelect.value];
           
+          // Update lastPlayedVideos immediately to ensure persistence
+          lastPlayedVideos.left = parseInt(leftVideoSelect.value);
+          lastPlayedVideos.right = parseInt(rightVideoSelect.value);
+          
           // Pass the current metadata along with the video objects
           const leftMetadata = {...videoMetadata.left};
           const rightMetadata = {...videoMetadata.right};
@@ -855,10 +883,6 @@ https://example.com/video2.mp4, Second video
         // Add to either selector panel
         const leftPanel = leftVideoSelect.parentNode;
         leftPanel.appendChild(loadSelectedBtn);
-        
-        // Update video info for the selected videos
-        updateVideoInfo(videos[leftVideoSelect.value], 'left');
-        updateVideoInfo(videos[rightVideoSelect.value], 'right');
       }
       
       // Update video info in the selector
@@ -1288,27 +1312,35 @@ https://example.com/video2.mp4, Second video
         }
       });
       
-      // Initialize
-      container.addEventListener('click', function(e) {
-        // Don't trigger play/pause if dragging or clicking on handle
-        if (isDragging || e.target === sliderHandle || sliderHandle.contains(e.target)) {
-          return;
-        }
+      // Initialize the first videos when the page loads
+      document.addEventListener('DOMContentLoaded', function() {
+        // Store URL and display name of initial videos for persistence
+        const leftVideoUrl = leftVideo.querySelector('source').src;
+        const rightVideoUrl = rightVideo.querySelector('source').src;
         
-        togglePlayPause();
+        // Set initial metadata
+        videoMetadata.left.filename = getFilenameFromUrl(leftVideoUrl);
+        videoMetadata.right.filename = getFilenameFromUrl(rightVideoUrl);
+        
+        // Set up event listeners for initial videos
+        leftVideo.addEventListener('loadeddata', updateVideoDimensions);
+        rightVideo.addEventListener('loadeddata', updateVideoDimensions);
+        
+        // Initialize time controls
+        initializeTimeSlider();
+        
+        // Add initial event listeners
+        leftVideo.addEventListener('ended', syncVideoEnding);
+        rightVideo.addEventListener('ended', syncVideoEnding);
+        leftVideo.addEventListener('timeupdate', updateTimer);
+        
+        // Set initial slider position
+        resetSlider();
       });
       
-      // Set initial slider position
-      resetSlider();
-      
-      // Load video dimensions for the default videos
-      leftVideo.addEventListener('loadeddata', updateVideoDimensions);
-      rightVideo.addEventListener('loadeddata', updateVideoDimensions);
-      
       // Example list of videos
-      videoList.value = `https://s3-us-west-2.amazonaws.com/s.cdpn.io/4273/floodplain-dirty.mp4, Original floodplain
-https://s3-us-west-2.amazonaws.com/s.cdpn.io/4273/floodplain-clean.mp4, Processed floodplain
-https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4, Big Buck Bunny`;
+      videoList.value = `IMG_2558.mov, original (and very low resolution) file
+IMG_2558_1_starlight.mp4, processed by Topaz Starlight beta cloud project - feb 2025`;
     });
   </script>
 </body>

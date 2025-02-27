@@ -135,12 +135,19 @@
       padding: 1.25rem;
       border-radius: 8px;
       box-shadow: var(--ui-shadow);
+      position: relative; /* Added for positioning Load button */
     }
 
     .selector-title {
       font-size: 1.1rem;
       font-weight: 500;
       margin-bottom: 0.75rem;
+    }
+    
+    #load-selected-btn {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.25rem;
     }
 
     .video-select {
@@ -249,7 +256,64 @@
       max-width: 45%;
       overflow: hidden;
       text-overflow: ellipsis;
-      white-space: nowrap;
+      white-space: normal; /* Changed from nowrap to allow line breaks */
+      line-height: 1.4;
+    }
+    
+    /* Timer display */
+    .video-timer {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      padding: 5px 8px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      z-index: 15;
+    }
+    
+    /* Time slider */
+    .time-slider-container {
+      position: absolute;
+      bottom: 40px;
+      left: 10px;
+      right: 10px;
+      z-index: 15;
+    }
+    
+    .time-slider {
+      width: 100%;
+      height: 8px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 4px;
+      outline: none;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    
+    .time-slider:hover {
+      opacity: 1;
+    }
+    
+    .time-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: white;
+      cursor: pointer;
+    }
+    
+    .time-slider::-moz-range-thumb {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: white;
+      cursor: pointer;
     }
     
     #left-video-overlay {
@@ -394,13 +458,13 @@
       <div class="video-overlay" id="right-video-overlay">Right Video</div>
       
       <!-- Right video (background) -->
-      <video id="right-video" loop muted>
+      <video id="right-video" muted>
         <source src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/4273/floodplain-clean.mp4" type="video/mp4">
       </video>
       
       <!-- Clipper with left video -->
       <div id="video-clipper">
-        <video id="left-video" loop muted>
+        <video id="left-video" muted>
           <source src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/4273/floodplain-dirty.mp4" type="video/mp4">
         </video>
       </div>
@@ -409,6 +473,14 @@
       <div class="slider-handle">
         <div class="slider-button">↔</div>
       </div>
+      
+      <!-- Time slider -->
+      <div class="time-slider-container">
+        <input type="range" id="time-slider" min="0" value="0" step="0.1" class="time-slider">
+      </div>
+      
+      <!-- Timer -->
+      <div id="video-timer" class="video-timer">0:00 / 0:00</div>
     </div>
     
     <div class="config-panel">
@@ -477,6 +549,14 @@ https://example.com/video2.mp4, Second video
       let currentPosition = 50; // Default slider position (%)
       let isPlaying = false;
       let videos = []; // Will hold all video objects
+      let lastPlayedVideos = { left: 0, right: 1 }; // Track indexes of last played videos
+      let isDraggingTimeSlider = false; // Track if user is dragging the time slider
+      
+      // Store video metadata to avoid duplicate information
+      let videoMetadata = {
+        left: { width: 0, height: 0, duration: 0, size: 0, filename: '', comment: '' },
+        right: { width: 0, height: 0, duration: 0, size: 0, filename: '', comment: '' }
+      };
       
       // Function to extract filename without path
       function getFilenameFromUrl(url) {
@@ -493,46 +573,79 @@ https://example.com/video2.mp4, Second video
         return filename;
       }
       
-      // Store video metadata to avoid duplicate information
-      let videoMetadata = {
-        left: { width: 0, height: 0, duration: 0, size: 0, filename: '', comment: '' },
-        right: { width: 0, height: 0, duration: 0, size: 0, filename: '', comment: '' }
-      };
+      // Synchronize videos when one ends with auto-resume
+      function syncVideoEnding() {
+        const leftVideo = document.getElementById('left-video');
+        const rightVideo = document.getElementById('right-video');
+        
+        // Reset both videos to beginning
+        if (leftVideo) leftVideo.currentTime = 0;
+        if (rightVideo) rightVideo.currentTime = 0;
+        
+        // Auto-resume playback immediately
+        if (leftVideo) leftVideo.play();
+        if (rightVideo) rightVideo.play();
+        
+        // Keep UI state as playing
+        isPlaying = true;
+        playPauseBtn.textContent = 'Pause';
+        
+        // Update timer and slider
+        updateTimer();
+      }
       
-      // Update video dimensions once loaded
+      // Update video dimensions once loaded - modified to not overwrite existing metadata
       function updateVideoDimensions() {
         if (leftVideo && leftVideo.videoWidth) {
-          const width = leftVideo.videoWidth;
-          const height = leftVideo.videoHeight;
-          const duration = leftVideo.duration || 0;
-          const filename = getFilenameFromUrl(leftVideo.querySelector('source').src);
-          
-          videoMetadata.left.width = width;
-          videoMetadata.left.height = height;
-          videoMetadata.left.duration = duration;
-          videoMetadata.left.filename = filename;
-          
-          updateVideoOverlay('left');
-          
-          // Fetch file size for left video
-          updateVideoFileSize(leftVideo.querySelector('source').src, 'left');
+          // Only update if we don't already have the data
+          if (!videoMetadata.left.width || !videoMetadata.left.height) {
+            const width = leftVideo.videoWidth;
+            const height = leftVideo.videoHeight;
+            const duration = leftVideo.duration || 0;
+            const filename = getFilenameFromUrl(leftVideo.querySelector('source').src);
+            
+            videoMetadata.left.width = width;
+            videoMetadata.left.height = height;
+            videoMetadata.left.duration = duration;
+            
+            // Only update filename if not already set
+            if (!videoMetadata.left.filename) {
+              videoMetadata.left.filename = filename;
+            }
+            
+            updateVideoOverlay('left');
+            
+            // Fetch file size for left video if we don't already have it
+            if (!videoMetadata.left.size) {
+              updateVideoFileSize(leftVideo.querySelector('source').src, 'left');
+            }
+          }
         }
         
         if (rightVideo && rightVideo.videoWidth) {
-          const width = rightVideo.videoWidth;
-          const height = rightVideo.videoHeight;
-          const duration = rightVideo.duration || 0;
-          const filename = getFilenameFromUrl(rightVideo.querySelector('source').src);
-          
-          videoMetadata.right.width = width;
-          videoMetadata.right.height = height;
-          videoMetadata.right.duration = duration;
-          videoMetadata.right.filename = filename;
-          
-          updateVideoOverlay('right');
-          
-          // Fetch file size for right video
-          updateVideoFileSize(rightVideo.querySelector('source').src, 'right');
+          // Only update if we don't already have the data
+          if (!videoMetadata.right.width || !videoMetadata.right.height) {
+            const width = rightVideo.videoWidth;
+            const height = rightVideo.videoHeight;
+            const duration = rightVideo.duration || 0;
+            const filename = getFilenameFromUrl(rightVideo.querySelector('source').src);
+            
+            videoMetadata.right.width = width;
+            videoMetadata.right.height = height;
+            videoMetadata.right.duration = duration;
+            
+            // Only update filename if not already set
+            if (!videoMetadata.right.filename) {
+              videoMetadata.right.filename = filename;
+            }
+            
+            updateVideoOverlay('right');
+            
+            // Fetch file size for right video if we don't already have it
+            if (!videoMetadata.right.size) {
+              updateVideoFileSize(rightVideo.querySelector('source').src, 'right');
+            }
+          }
         }
       }
       
@@ -560,12 +673,13 @@ https://example.com/video2.mp4, Second video
           infoText += ` ${metadata.size.toFixed(2)}MB`;
         }
         
-        // Add comment if available
+        // Add comment with line break if available
         if (metadata.comment) {
-          infoText += ` (${metadata.comment})`;
+          infoText += `\n${metadata.comment}`;
         }
         
-        overlay.textContent = infoText;
+        // Use innerHTML to handle line breaks
+        overlay.innerHTML = infoText.replace(/\n/g, '<br>');
       }
       
       // Helper function to fetch and update file size
@@ -575,7 +689,8 @@ https://example.com/video2.mp4, Second video
           if (response.ok) {
             const sizeBytes = response.headers.get('content-length');
             if (sizeBytes) {
-              const sizeMB = (sizeBytes / (1024 * 1024));
+              // Ensure we parse as a number and calculate correctly
+              const sizeMB = parseFloat(sizeBytes) / (1024 * 1024);
               videoMetadata[position].size = sizeMB;
               updateVideoOverlay(position);
             }
@@ -583,6 +698,44 @@ https://example.com/video2.mp4, Second video
         } catch (error) {
           console.error('Error fetching file size:', error);
         }
+      }
+      
+      // Preload video metadata when a video is selected (before loading)
+      async function preloadVideoMetadata(videoObj, position) {
+        return new Promise(async (resolve) => {
+          const filename = getFilenameFromUrl(videoObj.url);
+          
+          // Create a temporary video element to get metadata
+          const tempVideo = document.createElement('video');
+          tempVideo.preload = 'metadata';
+          tempVideo.style.display = 'none';
+          
+          // Set up event listeners
+          tempVideo.onloadedmetadata = function() {
+            // Update metadata object
+            videoMetadata[position].width = tempVideo.videoWidth;
+            videoMetadata[position].height = tempVideo.videoHeight;
+            videoMetadata[position].duration = tempVideo.duration;
+            
+            // Remove temporary element
+            document.body.removeChild(tempVideo);
+            
+            // Update display
+            updateVideoOverlay(position);
+            resolve();
+          };
+          
+          // Handle errors
+          tempVideo.onerror = function() {
+            console.error('Error loading video metadata');
+            document.body.removeChild(tempVideo);
+            resolve();
+          };
+          
+          // Add to DOM and start loading
+          document.body.appendChild(tempVideo);
+          tempVideo.src = videoObj.url;
+        });
       }
       
       // Load videos from the textarea
@@ -620,7 +773,7 @@ https://example.com/video2.mp4, Second video
         populateVideoSelectors();
         videoSelector.style.display = 'flex';
         
-        // Load the first two videos as default
+        // Load the first two videos as default with preloading
         updateVideoInfo(videos[0], 'left');
         updateVideoInfo(videos[1], 'right');
       });
@@ -644,11 +797,28 @@ https://example.com/video2.mp4, Second video
           rightVideoSelect.appendChild(rightOption);
         });
         
-        // Default selections
-        leftVideoSelect.value = 0;
-        rightVideoSelect.value = videos.length > 1 ? 1 : 0;
+        // Use last played videos if available, otherwise use first two videos
+        if (lastPlayedVideos.left < videos.length) {
+          leftVideoSelect.value = lastPlayedVideos.left;
+        } else {
+          leftVideoSelect.value = 0;
+        }
         
-        // Add change event listeners
+        if (lastPlayedVideos.right < videos.length && lastPlayedVideos.right !== lastPlayedVideos.left) {
+          rightVideoSelect.value = lastPlayedVideos.right;
+        } else if (videos.length > 1) {
+          // Use second video by default or first different video
+          if (lastPlayedVideos.left === 0) {
+            rightVideoSelect.value = 1;
+          } else {
+            rightVideoSelect.value = 0;
+          }
+        } else {
+          // If only one video, use it for both
+          rightVideoSelect.value = 0;
+        }
+        
+        // Add change event listeners with full preloading
         leftVideoSelect.addEventListener('change', function() {
           const selectedVideo = videos[this.value];
           updateVideoInfo(selectedVideo, 'left');
@@ -670,16 +840,25 @@ https://example.com/video2.mp4, Second video
         loadSelectedBtn.textContent = 'Load Selected Videos';
         loadSelectedBtn.className = 'btn';
         loadSelectedBtn.id = 'load-selected-btn'; // Add ID for easy reference
-        loadSelectedBtn.style.marginTop = '1rem';
+        
         loadSelectedBtn.addEventListener('click', function() {
-          const leftVideo = videos[leftVideoSelect.value];
-          const rightVideo = videos[rightVideoSelect.value];
-          loadVideoComparison(leftVideo, rightVideo);
+          const leftVideoObj = videos[leftVideoSelect.value];
+          const rightVideoObj = videos[rightVideoSelect.value];
+          
+          // Pass the current metadata along with the video objects
+          const leftMetadata = {...videoMetadata.left};
+          const rightMetadata = {...videoMetadata.right};
+          
+          loadVideoComparison(leftVideoObj, rightVideoObj, leftMetadata, rightMetadata);
         });
         
         // Add to either selector panel
         const leftPanel = leftVideoSelect.parentNode;
         leftPanel.appendChild(loadSelectedBtn);
+        
+        // Update video info for the selected videos
+        updateVideoInfo(videos[leftVideoSelect.value], 'left');
+        updateVideoInfo(videos[rightVideoSelect.value], 'right');
       }
       
       // Update video info in the selector
@@ -690,59 +869,64 @@ https://example.com/video2.mp4, Second video
         const filename = getFilenameFromUrl(video.url);
         infoElement.innerHTML = `<strong>${filename}</strong><br>`;
         
-        // Show loading message while fetching size
+        // Show loading message while fetching info
         infoElement.innerHTML += 'Loading file info...';
         
-        // Update metadata with selected video information
+        // Update basic metadata 
         videoMetadata[position].filename = filename;
         videoMetadata[position].comment = video.comment || '';
+        updateVideoOverlay(position);
         
+        // Fetch size
         try {
-          // Fetch file to get size (using HEAD request to save bandwidth)
           const response = await fetch(video.url, { method: 'HEAD' });
           if (response.ok) {
             const sizeBytes = response.headers.get('content-length');
             if (sizeBytes) {
-              const sizeMB = (sizeBytes / (1024 * 1024)).toFixed(2);
-              infoElement.innerHTML = `<strong>${filename}</strong><br>`;
-              infoElement.innerHTML += `Size: ${sizeMB} MB<br>`;
+              const sizeMB = (sizeBytes / (1024 * 1024));
               
               // Update metadata
-              videoMetadata[position].size = parseFloat(sizeMB);
+              videoMetadata[position].size = sizeMB;
               updateVideoOverlay(position);
+              
+              // Update info element
+              infoElement.innerHTML = `<strong>${filename}</strong><br>`;
+              infoElement.innerHTML += `Size: ${sizeMB.toFixed(2)} MB<br>`;
+              
+              // Add comment as the description on a new line
+              if (video.comment) {
+                infoElement.innerHTML += `${video.comment}`;
+              }
             }
           }
         } catch (error) {
           console.error('Error fetching file size:', error);
           infoElement.innerHTML = `<strong>${filename}</strong><br>`;
+          if (video.comment) {
+            infoElement.innerHTML += `${video.comment}`;
+          }
         }
         
-        // Add comment as the description on a new line
-        if (video.comment) {
-          infoElement.innerHTML += `${video.comment}`;
-        }
+        // Preload video metadata (dimensions, duration)
+        await preloadVideoMetadata(video, position);
       }
       
       // Load the selected videos for comparison
-      function loadVideoComparison(leftVideoObj, rightVideoObj) {
+      function loadVideoComparison(leftVideoObj, rightVideoObj, savedLeftMetadata, savedRightMetadata) {
         // Hide selector if it was shown
         videoSelector.style.display = 'none';
         
-        // Save comments to metadata
-        videoMetadata.left.comment = leftVideoObj.comment || '';
-        videoMetadata.right.comment = rightVideoObj.comment || '';
-        
-        // Create new video elements
+        // Create new video elements with sync behavior
         const newLeftVideo = document.createElement('video');
         newLeftVideo.id = 'left-video';
-        newLeftVideo.loop = true;
+        // No loop attribute
         newLeftVideo.muted = true;
         newLeftVideo.style.width = '200%';
         newLeftVideo.innerHTML = `<source src="${leftVideoObj.url}" type="video/mp4">`;
         
         const newRightVideo = document.createElement('video');
         newRightVideo.id = 'right-video';
-        newRightVideo.loop = true;
+        // No loop attribute
         newRightVideo.muted = true;
         newRightVideo.innerHTML = `<source src="${rightVideoObj.url}" type="video/mp4">`;
         
@@ -757,35 +941,83 @@ https://example.com/video2.mp4, Second video
         const updatedLeftVideo = document.getElementById('left-video');
         const updatedRightVideo = document.getElementById('right-video');
         
-        // Set initial overlay info with just filename until full data loads
-        const leftFilename = getFilenameFromUrl(leftVideoObj.url);
-        const rightFilename = getFilenameFromUrl(rightVideoObj.url);
+        // If we have saved metadata from selection, use it
+        if (savedLeftMetadata) {
+          videoMetadata.left = savedLeftMetadata;
+        } else {
+          // Otherwise, reset and get basic metadata
+          videoMetadata.left.filename = getFilenameFromUrl(leftVideoObj.url);
+          videoMetadata.left.comment = leftVideoObj.comment || '';
+        }
         
-        leftVideoOverlay.textContent = leftFilename;
-        rightVideoOverlay.textContent = rightFilename;
+        if (savedRightMetadata) {
+          videoMetadata.right = savedRightMetadata;
+        } else {
+          // Otherwise, reset and get basic metadata
+          videoMetadata.right.filename = getFilenameFromUrl(rightVideoObj.url);
+          videoMetadata.right.comment = rightVideoObj.comment || '';
+        }
         
-        // Update metadata with initial information
-        videoMetadata.left.filename = leftFilename;
-        videoMetadata.right.filename = rightFilename;
+        // Update overlays with current metadata
+        updateVideoOverlay('left');
+        updateVideoOverlay('right');
         
-        // Reset other metadata
-        videoMetadata.left.width = 0;
-        videoMetadata.left.height = 0;
-        videoMetadata.left.duration = 0;
-        videoMetadata.left.size = 0;
+        // Clear any existing timer interval
+        if (updateTimerInterval) {
+          clearInterval(updateTimerInterval);
+        }
         
-        videoMetadata.right.width = 0;
-        videoMetadata.right.height = 0;
-        videoMetadata.right.duration = 0;
-        videoMetadata.right.size = 0;
+        // Initialize timer and time slider once both videos have loaded
+        const initTimeControls = function() {
+          if (updatedLeftVideo.readyState >= 1 && updatedRightVideo.readyState >= 1) {
+            initializeTimeSlider();
+            updateTimer();
+            
+            // If both videos have successfully loaded metadata, remove the listeners
+            updatedLeftVideo.removeEventListener('loadedmetadata', initTimeControls);
+            updatedRightVideo.removeEventListener('loadedmetadata', initTimeControls);
+          }
+        };
         
-        // Add event listeners for video dimensions
-        updatedLeftVideo.addEventListener('loadeddata', updateVideoDimensions);
-        updatedRightVideo.addEventListener('loadeddata', updateVideoDimensions);
+        // Add the event listeners
+        updatedLeftVideo.addEventListener('loadedmetadata', initTimeControls);
+        updatedRightVideo.addEventListener('loadedmetadata', initTimeControls);
         
-        // Get file sizes
-        updateVideoFileSize(leftVideoObj.url, 'left');
-        updateVideoFileSize(rightVideoObj.url, 'right');
+        // Add timeupdate listeners to keep the slider and timer in sync
+        updatedLeftVideo.addEventListener('timeupdate', function() {
+          if (!isDraggingTimeSlider) {
+            updateTimer();
+          }
+        });
+        
+        // We'll still need video dimensions, but we'll avoid overwriting existing metadata
+        updatedLeftVideo.addEventListener('loadeddata', function() {
+          // Only update if we don't already have the data
+          if (!videoMetadata.left.width || !videoMetadata.left.height) {
+            videoMetadata.left.width = updatedLeftVideo.videoWidth;
+            videoMetadata.left.height = updatedLeftVideo.videoHeight;
+            videoMetadata.left.duration = updatedLeftVideo.duration || 0;
+            updateVideoOverlay('left');
+          }
+        });
+        
+        updatedRightVideo.addEventListener('loadeddata', function() {
+          // Only update if we don't already have the data
+          if (!videoMetadata.right.width || !videoMetadata.right.height) {
+            videoMetadata.right.width = updatedRightVideo.videoWidth;
+            videoMetadata.right.height = updatedRightVideo.videoHeight;
+            videoMetadata.right.duration = updatedRightVideo.duration || 0;
+            updateVideoOverlay('right');
+          }
+        });
+        
+        // Add video synchronization event listeners
+        updatedLeftVideo.addEventListener('ended', syncVideoEnding);
+        updatedRightVideo.addEventListener('ended', syncVideoEnding);
+        
+        // Update the last played videos
+        lastPlayedVideos.left = parseInt(leftVideoSelect.value);
+        lastPlayedVideos.right = parseInt(rightVideoSelect.value);
         
         // Reset to default state
         resetSlider();
@@ -815,6 +1047,52 @@ https://example.com/video2.mp4, Second video
         }
       }
       
+      // Function to format time in MM:SS format
+      function formatTime(seconds) {
+        if (!seconds || isNaN(seconds) || seconds === Infinity) return "0:00";
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+      }
+      
+      // Update the timer display
+      function updateTimer() {
+        const leftVideo = document.getElementById('left-video');
+        const rightVideo = document.getElementById('right-video');
+        const timerElement = document.getElementById('video-timer');
+        const timeSlider = document.getElementById('time-slider');
+        
+        if (!leftVideo || !rightVideo || !timerElement) return;
+        
+        // Get the shortest duration
+        const shortestDuration = Math.min(
+          isFinite(leftVideo.duration) ? leftVideo.duration : Infinity,
+          isFinite(rightVideo.duration) ? rightVideo.duration : Infinity
+        );
+        
+        // If we don't have valid durations yet, exit
+        if (shortestDuration === Infinity) {
+          timerElement.textContent = "0:00 / 0:00";
+          return;
+        }
+        
+        // Get the current time (they should be synced, but let's use the left video)
+        const currentTime = leftVideo.currentTime;
+        
+        // Update the timer display
+        timerElement.textContent = `${formatTime(currentTime)} / ${formatTime(shortestDuration)}`;
+        
+        // Update time slider max value if needed
+        if (timeSlider && parseFloat(timeSlider.max) !== shortestDuration) {
+          timeSlider.max = shortestDuration;
+        }
+        
+        // Update time slider value if not being dragged
+        if (timeSlider && !isDraggingTimeSlider) {
+          timeSlider.value = currentTime;
+        }
+      }
+      
       // Play/Pause functionality
       playPauseBtn.addEventListener('click', togglePlayPause);
       
@@ -828,12 +1106,63 @@ https://example.com/video2.mp4, Second video
           playPauseBtn.textContent = 'Pause';
           if (leftVideo) leftVideo.play();
           if (rightVideo) rightVideo.play();
+          
+          // Start timer updates when playing
+          updateTimerInterval = setInterval(updateTimer, 250);
         } else {
           playPauseBtn.textContent = 'Play';
           if (leftVideo) leftVideo.pause();
           if (rightVideo) rightVideo.pause();
+          
+          // Stop timer updates when paused
+          clearInterval(updateTimerInterval);
+          updateTimer(); // Final update to ensure display is correct
         }
       }
+      
+      // Initialize time slider functionality
+      function initializeTimeSlider() {
+        const timeSlider = document.getElementById('time-slider');
+        const leftVideo = document.getElementById('left-video');
+        const rightVideo = document.getElementById('right-video');
+        
+        if (!timeSlider || !leftVideo || !rightVideo) return;
+        
+        // Set initial max value
+        if (leftVideo.duration && rightVideo.duration) {
+          timeSlider.max = Math.min(leftVideo.duration, rightVideo.duration);
+        }
+        
+        // Add event listeners for the time slider
+        timeSlider.addEventListener('mousedown', function() {
+          isDraggingTimeSlider = true;
+          if (isPlaying) {
+            leftVideo.pause();
+            rightVideo.pause();
+          }
+        });
+        
+        timeSlider.addEventListener('mouseup', function() {
+          isDraggingTimeSlider = false;
+          if (isPlaying) {
+            leftVideo.play();
+            rightVideo.play();
+          }
+        });
+        
+        timeSlider.addEventListener('input', function() {
+          const seekTime = parseFloat(timeSlider.value);
+          if (leftVideo) leftVideo.currentTime = seekTime;
+          if (rightVideo) rightVideo.currentTime = seekTime;
+          updateTimer();
+        });
+        
+        // Update timer immediately
+        updateTimer();
+      }
+      
+      // Variable to store the interval ID for timer updates
+      let updateTimerInterval;
       
       // Reset slider to middle
       resetBtn.addEventListener('click', resetSlider);

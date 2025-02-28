@@ -510,7 +510,10 @@ https://example.com/video2.mp4, Second video
   </div>
 
   <script>
+    // Wait for the DOM to be fully loaded
     document.addEventListener('DOMContentLoaded', function() {
+      console.log("DOM fully loaded and parsed");
+      
       // Theme switching
       const body = document.body;
       const themeToggle = document.getElementById('theme-toggle');
@@ -587,15 +590,26 @@ https://example.com/video2.mp4, Second video
         return filename;
       }
       
-      // Synchronize videos when one ends with auto-resume
-      function syncVideoEnding() {
+      // Enhanced video synchronization to handle different duration videos
+      function syncVideoEnding(event) {
+        console.log("Video ended event triggered");
         const leftVideo = document.getElementById('left-video');
         const rightVideo = document.getElementById('right-video');
         
-        // With loop attribute, videos will automatically restart
-        // This function now just ensures they stay synchronized
-        if (leftVideo && rightVideo) {
-          // Reset both videos to beginning to ensure sync
+        if (!leftVideo || !rightVideo) return;
+        
+        // Get which video triggered the event
+        const triggeredVideo = event.target;
+        const otherVideo = triggeredVideo === leftVideo ? rightVideo : leftVideo;
+        
+        console.log(`Video ended: ${triggeredVideo === leftVideo ? 'left' : 'right'}`);
+        
+        // Check if we need to force synchronization
+        // If the video that ended is shorter than the other, we need to sync them
+        if (triggeredVideo.duration < otherVideo.duration) {
+          console.log("Shorter video ended - forcing synchronization");
+          
+          // Reset both videos to beginning
           leftVideo.currentTime = 0;
           rightVideo.currentTime = 0;
           
@@ -604,10 +618,10 @@ https://example.com/video2.mp4, Second video
             leftVideo.play();
             rightVideo.play();
           }
-          
-          // Update timer and slider
-          updateTimer();
         }
+        
+        // Update timer and slider
+        updateTimer();
       }
       
       // Update video dimensions once loaded - modified to not overwrite existing metadata
@@ -996,128 +1010,37 @@ https://example.com/video2.mp4, Second video
       
       // Load the selected videos for comparison
       function loadVideoComparison(leftVideoObj, rightVideoObj, savedLeftMetadata, savedRightMetadata) {
+        console.log("Loading video comparison from selector...");
+        
         // Hide selector if it was shown
         videoSelector.style.display = 'none';
         
-        // Create new video elements with sync behavior
-        const newLeftVideo = document.createElement('video');
-        newLeftVideo.id = 'left-video';
-        newLeftVideo.loop = true; // Add loop attribute
-        newLeftVideo.muted = true;
-        newLeftVideo.style.width = '200%';
-        newLeftVideo.innerHTML = `<source src="${leftVideoObj.url}" type="video/mp4">`;
-        
-        const newRightVideo = document.createElement('video');
-        newRightVideo.id = 'right-video';
-        newRightVideo.loop = true; // Add loop attribute
-        newRightVideo.muted = true;
-        newRightVideo.innerHTML = `<source src="${rightVideoObj.url}" type="video/mp4">`;
-        
-        // Replace current videos
-        clipper.innerHTML = '';
-        clipper.appendChild(newLeftVideo);
-        
-        const oldRightVideo = document.getElementById('right-video');
-        container.replaceChild(newRightVideo, oldRightVideo);
-        
-        // Update references
-        const updatedLeftVideo = document.getElementById('left-video');
-        const updatedRightVideo = document.getElementById('right-video');
+        // Update the video sources
+        updateVideoSources(leftVideoObj, rightVideoObj);
         
         // If we have saved metadata from selection, use it
         if (savedLeftMetadata) {
           videoMetadata.left = savedLeftMetadata;
-        } else {
-          // Otherwise, reset and get basic metadata
-          videoMetadata.left.filename = getFilenameFromUrl(leftVideoObj.url);
-          videoMetadata.left.comment = leftVideoObj.comment || '';
+          updateVideoOverlay('left');
         }
         
         if (savedRightMetadata) {
           videoMetadata.right = savedRightMetadata;
-        } else {
-          // Otherwise, reset and get basic metadata
-          videoMetadata.right.filename = getFilenameFromUrl(rightVideoObj.url);
-          videoMetadata.right.comment = rightVideoObj.comment || '';
+          updateVideoOverlay('right');
         }
-        
-        // Update overlays with current metadata
-        updateVideoOverlay('left');
-        updateVideoOverlay('right');
-        
-        // Clear any existing timer interval
-        if (updateTimerInterval) {
-          clearInterval(updateTimerInterval);
-        }
-        
-        // Initialize timer and time slider once both videos have loaded
-        const initTimeControls = function() {
-          if (updatedLeftVideo.readyState >= 1 && updatedRightVideo.readyState >= 1) {
-            initializeTimeSlider();
-            updateTimer();
-            
-            // If both videos have successfully loaded metadata, remove the listeners
-            updatedLeftVideo.removeEventListener('loadedmetadata', initTimeControls);
-            updatedRightVideo.removeEventListener('loadedmetadata', initTimeControls);
-          }
-        };
-        
-        // Add the event listeners
-        updatedLeftVideo.addEventListener('loadedmetadata', initTimeControls);
-        updatedRightVideo.addEventListener('loadedmetadata', initTimeControls);
-        
-        // Add timeupdate listeners to keep the slider and timer in sync
-        updatedLeftVideo.addEventListener('timeupdate', function() {
-          if (!isDraggingTimeSlider) {
-            updateTimer();
-          }
-        });
-        
-        // We'll still need video dimensions, but we'll avoid overwriting existing metadata
-        updatedLeftVideo.addEventListener('loadeddata', function() {
-          // Only update if we don't already have the data
-          if (!videoMetadata.left.width || !videoMetadata.left.height) {
-            videoMetadata.left.width = updatedLeftVideo.videoWidth;
-            videoMetadata.left.height = updatedLeftVideo.videoHeight;
-            videoMetadata.left.duration = updatedLeftVideo.duration || 0;
-            updateVideoOverlay('left');
-          }
-        });
-        
-        updatedRightVideo.addEventListener('loadeddata', function() {
-          // Only update if we don't already have the data
-          if (!videoMetadata.right.width || !videoMetadata.right.height) {
-            videoMetadata.right.width = updatedRightVideo.videoWidth;
-            videoMetadata.right.height = updatedRightVideo.videoHeight;
-            videoMetadata.right.duration = updatedRightVideo.duration || 0;
-            updateVideoOverlay('right');
-          }
-        });
-        
-        // Add video synchronization event listeners
-        updatedLeftVideo.addEventListener('ended', syncVideoEnding);
-        updatedRightVideo.addEventListener('ended', syncVideoEnding);
         
         // Update the last played videos
         lastPlayedVideos.left = parseInt(leftVideoSelect.value);
         lastPlayedVideos.right = parseInt(rightVideoSelect.value);
-        
-        // Reset to default state
-        resetSlider();
-        isPlaying = false;
-        playPauseBtn.textContent = 'Play';
-        
-        // Add a slight delay to make sure videos are ready before restarting
-        setTimeout(function() {
-          // Restart both videos to align on first frame
-          restartVideos();
-        }, 200);
       }
       
       // Function to dynamically load initial videos from the list
       function loadInitialVideos() {
+        console.log("Loading initial videos...");
+        
         // Initially hide the video-compare-container and show a loading message
         const loadingMessage = document.createElement('div');
+        loadingMessage.id = "loading-message"; // Add ID for easy reference
         loadingMessage.style.position = 'absolute';
         loadingMessage.style.top = '50%';
         loadingMessage.style.left = '50%';
@@ -1125,14 +1048,22 @@ https://example.com/video2.mp4, Second video
         loadingMessage.style.color = 'white';
         loadingMessage.style.fontSize = '18px';
         loadingMessage.textContent = 'Loading videos...';
+        
+        // Clear previous messages if any
+        const oldMessage = document.getElementById("loading-message");
+        if (oldMessage) {
+          oldMessage.remove();
+        }
+        
         container.style.backgroundColor = '#000';
         container.appendChild(loadingMessage);
         
         // Parse the initial video list and load the first two videos
         const lines = videoList.value.trim().split('\n');
+        console.log(`Found ${lines.length} video entries in the list`);
         
         // Parse video entries
-        if (lines.length >= 2) {
+        if (lines.length >= 1) {
           videos = lines.map((line, index) => {
             const parts = line.split(',');
             const url = parts[0].trim();
@@ -1150,10 +1081,13 @@ https://example.com/video2.mp4, Second video
           
           // Load the first two videos if available
           if (videos.length >= 2) {
-            loadVideoComparison(videos[0], videos[1]);
+            console.log(`Loading videos: ${videos[0].filename} and ${videos[1].filename}`);
+            // Update the video sources directly
+            updateVideoSources(videos[0], videos[1]);
           } else if (videos.length === 1) {
             // If only one video, use it for both sides
-            loadVideoComparison(videos[0], videos[0]);
+            console.log(`Loading single video: ${videos[0].filename} for both sides`);
+            updateVideoSources(videos[0], videos[0]);
           } else {
             showNoVideosMessage();
           }
@@ -1163,6 +1097,159 @@ https://example.com/video2.mp4, Second video
         
         // Initialize the download button
         updateDownloadButton();
+      }
+      
+      // Function to directly update video sources without recreating elements
+      function updateVideoSources(leftVideoObj, rightVideoObj) {
+        console.log("Updating video sources...");
+        
+        // Get references to existing video elements
+        const leftVideo = document.getElementById('left-video');
+        const rightVideo = document.getElementById('right-video');
+        
+        // Make sure the videos are present
+        if (!leftVideo || !rightVideo) {
+          console.error("Video elements not found in the DOM");
+          showNoVideosMessage();
+          return;
+        }
+        
+        // Reset videos to release any previous sources
+        leftVideo.pause();
+        rightVideo.pause();
+        
+        // Set new sources
+        const leftSource = leftVideo.querySelector('source') || document.createElement('source');
+        leftSource.src = leftVideoObj.url;
+        leftSource.type = "video/mp4";
+        
+        const rightSource = rightVideo.querySelector('source') || document.createElement('source');
+        rightSource.src = rightVideoObj.url;
+        rightSource.type = "video/mp4";
+        
+        // Update or append sources
+        if (!leftVideo.querySelector('source')) {
+          leftVideo.appendChild(leftSource);
+        }
+        
+        if (!rightVideo.querySelector('source')) {
+          rightVideo.appendChild(rightSource);
+        }
+        
+        // Ensure loop attribute is set
+        leftVideo.loop = true;
+        rightVideo.loop = true;
+        
+        // Force the videos to reload with new sources
+        leftVideo.load();
+        rightVideo.load();
+        
+        console.log(`Video sources updated: ${leftVideoObj.url} and ${rightVideoObj.url}`);
+        
+        // Set initial metadata
+        videoMetadata = {
+          left: {
+            filename: getFilenameFromUrl(leftVideoObj.url),
+            comment: leftVideoObj.comment || '',
+            width: 0,
+            height: 0,
+            duration: 0,
+            size: 0
+          },
+          right: {
+            filename: getFilenameFromUrl(rightVideoObj.url),
+            comment: rightVideoObj.comment || '',
+            width: 0,
+            height: 0,
+            duration: 0,
+            size: 0
+          }
+        };
+        
+        // Update overlays with current metadata
+        updateVideoOverlay('left');
+        updateVideoOverlay('right');
+        
+        // Track loading status
+        let loadedVideos = 0;
+        const loadingMessage = document.getElementById("loading-message");
+        
+        // Handle successful loading
+        function handleVideoLoaded() {
+          loadedVideos++;
+          console.log(`Video loaded (${loadedVideos}/2)`);
+          
+          if (loadedVideos >= 2) {
+            console.log("Both videos loaded successfully");
+            
+            // Remove loading message
+            if (loadingMessage) {
+              loadingMessage.remove();
+            }
+            
+            // Update dimensions and info
+            updateVideoDimensions();
+            
+            // Initialize the time slider
+            initializeTimeSlider();
+            
+            // Restart videos to align them
+            setTimeout(restartVideos, 200);
+            
+            // Reset slider position
+            resetSlider();
+          }
+        }
+        
+        // Handle loading errors
+        function handleVideoError(e) {
+          console.error("Error loading video:", e);
+          showNoVideosMessage();
+        }
+        
+        // Set up event listeners for loading
+        leftVideo.addEventListener('loadeddata', handleVideoLoaded, { once: true });
+        rightVideo.addEventListener('loadeddata', handleVideoLoaded, { once: true });
+        
+        leftVideo.addEventListener('error', handleVideoError, { once: true });
+        rightVideo.addEventListener('error', handleVideoError, { once: true });
+        
+        // Add event listeners for synchronization and updates
+        leftVideo.removeEventListener('ended', syncVideoEnding);
+        rightVideo.removeEventListener('ended', syncVideoEnding);
+        
+        leftVideo.addEventListener('ended', syncVideoEnding);
+        rightVideo.addEventListener('ended', syncVideoEnding);
+        
+        // Add timeupdate listener with sync logic
+        leftVideo.addEventListener('timeupdate', function() {
+          if (!isDraggingTimeSlider) {
+            updateTimer();
+            
+            // Check for loop detection - this helps catch when HTML5 auto-loop happens
+            if (leftVideo && rightVideo && isPlaying) {
+              // If left video just looped (currentTime near 0 after being higher)
+              if (leftVideo.currentTime < 0.1 && leftVideo._previousTime && leftVideo._previousTime > leftVideo.duration - 0.5) {
+                console.log("Left video loop detected - synchronizing");
+                rightVideo.currentTime = 0;
+              }
+              
+              // If right video just looped
+              if (rightVideo.currentTime < 0.1 && rightVideo._previousTime && rightVideo._previousTime > rightVideo.duration - 0.5) {
+                console.log("Right video loop detected - synchronizing");
+                leftVideo.currentTime = 0;
+              }
+              
+              // Store the current time for next comparison
+              leftVideo._previousTime = leftVideo.currentTime;
+              rightVideo._previousTime = rightVideo.currentTime;
+            }
+          }
+        });
+        
+        // Reset UI state
+        isPlaying = false;
+        playPauseBtn.textContent = 'Play';
       }
       
       // Track mouse movement for slider
@@ -1248,6 +1335,31 @@ https://example.com/video2.mp4, Second video
           
           // Start timer updates when playing
           updateTimerInterval = setInterval(updateTimer, 250);
+          
+          // Start sync interval to periodically check and fix sync issues
+          syncInterval = setInterval(function() {
+            const leftVideo = document.getElementById('left-video');
+            const rightVideo = document.getElementById('right-video');
+            
+            if (leftVideo && rightVideo && isPlaying) {
+              // Check if we need to sync videos that have gotten out of sync
+              // If one video has looped but the other hasn't, we need to sync them
+              const leftTime = leftVideo.currentTime;
+              const rightTime = rightVideo.currentTime;
+              
+              // If the time difference is large (more than 0.5 seconds), it might indicate a sync issue
+              if (Math.abs(leftTime - rightTime) > 0.5) {
+                // Check if it seems like one has looped but not the other
+                if (leftTime < 0.5 && rightTime > 0.5) {
+                  console.log("Sync correction: left video has looped, syncing right video");
+                  rightVideo.currentTime = leftTime;
+                } else if (rightTime < 0.5 && leftTime > 0.5) {
+                  console.log("Sync correction: right video has looped, syncing left video");
+                  leftVideo.currentTime = rightTime;
+                }
+              }
+            }
+          }, 1000);
         } else {
           playPauseBtn.textContent = 'Play';
           if (leftVideo) leftVideo.pause();
@@ -1255,26 +1367,40 @@ https://example.com/video2.mp4, Second video
           
           // Stop timer updates when paused
           clearInterval(updateTimerInterval);
+          clearInterval(syncInterval);
           updateTimer(); // Final update to ensure display is correct
         }
       }
       
       // Initialize time slider functionality
       function initializeTimeSlider() {
+        console.log("Initializing time slider...");
         const timeSlider = document.getElementById('time-slider');
         const leftVideo = document.getElementById('left-video');
         const rightVideo = document.getElementById('right-video');
         
-        if (!timeSlider || !leftVideo || !rightVideo) return;
+        if (!timeSlider || !leftVideo || !rightVideo) {
+          console.error("Missing elements for time slider initialization");
+          return;
+        }
         
         // Set initial max value to the shortest duration
         if (leftVideo.duration && rightVideo.duration) {
           const shortestDuration = Math.min(leftVideo.duration, rightVideo.duration);
           timeSlider.max = shortestDuration;
+          console.log(`Time slider max set to ${shortestDuration}s (shortest duration)`);
+        } else {
+          console.log("Video durations not available yet, will update later");
+          // Set a default max if durations aren't available yet
+          timeSlider.max = 100;
         }
         
+        // Remove existing event listeners if any
+        const newTimeSlider = timeSlider.cloneNode(true);
+        timeSlider.parentNode.replaceChild(newTimeSlider, timeSlider);
+        
         // Add event listeners for the time slider
-        timeSlider.addEventListener('mousedown', function() {
+        newTimeSlider.addEventListener('mousedown', function() {
           isDraggingTimeSlider = true;
           if (isPlaying) {
             leftVideo.pause();
@@ -1282,7 +1408,7 @@ https://example.com/video2.mp4, Second video
           }
         });
         
-        timeSlider.addEventListener('mouseup', function() {
+        newTimeSlider.addEventListener('mouseup', function() {
           isDraggingTimeSlider = false;
           if (isPlaying) {
             leftVideo.play();
@@ -1290,8 +1416,9 @@ https://example.com/video2.mp4, Second video
           }
         });
         
-        timeSlider.addEventListener('input', function() {
-          const seekTime = parseFloat(timeSlider.value);
+        newTimeSlider.addEventListener('input', function() {
+          const seekTime = parseFloat(this.value);
+          console.log(`Seeking to ${seekTime}s`);
           if (leftVideo) leftVideo.currentTime = seekTime;
           if (rightVideo) rightVideo.currentTime = seekTime;
           updateTimer();
@@ -1431,21 +1558,19 @@ https://example.com/video2.mp4, Second video
         }
       });
       
-      // Initialize by loading videos from the list
-      document.addEventListener('DOMContentLoaded', function() {
-        // Load videos from the list
-        loadInitialVideos();
-      });
+      // We'll load the videos after setting up the initial video list
+      // Don't call loadInitialVideos() here - it's already being called inside DOMContentLoaded
       
-      // Load videos on page load
-      loadInitialVideos();
-      
-      // Example list of videos
+      // Example list of videos - set the list value first
       videoList.value = `ballmer monkey dance 236x176 aligned.mp4,Steve Ballmer famous Monkey Dance (found on YouTube)
 ballmer monkey dance_starlight.mp4,Topaz Starlight - cloud beta
 ballmer monkey dance_prob4.mp4,Topaz Proteus enhancement - local
 Pub France Telecom 1996 - Le Soleil-240p-trim.mp4,France Telecom 2000 ad (small)
 Pub France Telecom 1996 - Le Soleil_starlight.mp4,Topaz Starlight - cloud beta`;
+      
+      // Now load the initial videos from the list
+      console.log("Starting initial video loading sequence");
+      loadInitialVideos();
     });
   </script>
 </body>

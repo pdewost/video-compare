@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<!--
+  ©Philippe Dewost, 2025 — inspired by @chenyuntc, refined and enhanced with the help of Claude Sonnet 3.7
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enhanced Video Comparison Tool</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Light theme (default) */
+      --bg-color: #ffffff;
+      --bg-secondary: #f5f5f5;
+      --text-color: #333333;
+      --text-secondary: #666666;
+      --border-color: #e0e0e0;
+      --primary-color: #444444;
+      --primary-hover: #333333;
+      --ui-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      --handle-width: 4px;
+      --handle-color: #ffffff;
+      --handle-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    }
+
+    .dark-theme {
+      --bg-color: #121212;
+      --bg-secondary: #1e1e1e;
+      --text-color: #f5f5f5;
+      --text-secondary: #bbbbbb;
+      --border-color: #333333;
+      --primary-color: #bbbbbb;
+      --primary-hover: #dddddd;
+      --ui-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      --handle-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: 'Roboto', sans-serif;
+      line-height: 1.6;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+
+    h1 {
+      font-weight: 900; /* Black weight instead of 500 */
+      font-size: 2rem; /* 2pts bigger, from 1.8rem to 2rem */
+      margin: 0;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      font-weight: 300; /* Light */
+      margin-top: 0.25rem;
+      font-size: 1.2rem; /* 2pts bigger, from 1rem to 1.2rem */
+    }
+
+    .header-controls {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .theme-toggle {
+      background-color: var(--bg-secondary);
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Roboto', sans-serif;
+      font-weight: 500;
+      font-size: 1rem;
+      color: var(--text-color);
+    }
+
+    .theme-toggle:hover {
+      background-color: var(--border-color);
+    }
+
+    .controls {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Roboto', sans-serif;
+      font-weight: 500;
+      font-size: 1rem;
+      transition: background-color 0.2s;
+    }
+
+    .btn:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .video-selector {
+      display: flex;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .selector-panel {
+      flex: 1;
+      background-color: var(--bg-secondary);
+      padding: 1.25rem;
+      border-radius: 8px;
+      box-shadow: var(--ui-shadow);
+      position: relative; /* Added for positioning Load button */
+    }
+
+    .selector-title {
+      font-size: 1.1rem;
+      font-weight: 500;
+      margin-bottom: 0.75rem;
+    }
+    
+    #load-selected-btn {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.25rem;
+    }
+
+    .video-select {
+      width: 100%;
+      padding: 0.75rem;
+      border-radius: 4px;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: 'Roboto', sans-serif;
+      margin-bottom: 0.75rem;
+    }
+
+    .video-select option {
+      padding: 0.5rem;
+    }
+
+    .video-info {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-top: 0.5rem;
+      min-height: 3rem;
+    }
+
+    /* Video comparison container */
+    #video-compare-container {
+      position: relative;
+      width: 100%;
+      padding-top: 56.25%; /* 16:9 aspect ratio */
+      background-color: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--ui-shadow);
+    }
+
+    /* Background video */
+    #video-compare-container > video {
+      width: 100%;
+      position: absolute;
+      top: 0;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Clipper for foreground video */
+    #video-clipper {
+      width: 50%;
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      overflow: hidden;
+    }
+
+    /* Foreground video inside clipper */
+    #video-clipper video {
+      width: 200%; /* Initially 200% width */
+      position: absolute;
+      height: 100%;
+      left: 0;
+      object-fit: cover;
+    }
+
+    /* Slider handle */
+    .slider-handle {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: var(--handle-width);
+      height: 100%;
+      background-color: var(--handle-color);
+      transform: translateX(-50%);
+      cursor: col-resize;
+      z-index: 10;
+      box-shadow: var(--handle-shadow);
+    }
+
+    .slider-button {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background-color: var(--handle-color);
+      box-shadow: var(--handle-shadow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      color: #333;
+    }
+
+    /* Video information overlays */
+    .video-overlay {
+      position: absolute;
+      top: 10px;
+      padding: 8px 12px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-weight: 400;
+      z-index: 5;
+      max-width: 45%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: normal; /* Changed from nowrap to allow line breaks */
+      line-height: 1.4;
+    }
+    
+    /* Timer display */
+    .video-timer {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      padding: 5px 8px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      z-index: 15;
+    }
+    
+    /* Time slider */
+    .time-slider-container {
+      position: absolute;
+      bottom: 40px;
+      left: 10px;
+      right: 10px;
+      z-index: 15;
+    }
+    
+    .time-slider {
+      width: 100%;
+      height: 8px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 4px;
+      outline: none;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    
+    .time-slider:hover {
+      opacity: 1;
+    }
+    
+    .time-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: white;
+      cursor: pointer;
+    }
+    
+    .time-slider::-moz-range-thumb {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: white;
+      cursor: pointer;
+    }
+    
+    #left-video-overlay {
+      left: 10px;
+    }
+    
+    #right-video-overlay {
+      right: 10px;
+    }
+
+    /* Configuration panel */
+    .config-panel {
+      background-color: var(--bg-secondary);
+      padding: 1.25rem;
+      border-radius: 8px;
+      margin-top: 2rem;
+      box-shadow: var(--ui-shadow);
+    }
+
+    .config-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .config-title {
+      font-size: 1.1rem;
+      font-weight: 500;
+      margin: 0;
+    }
+
+    .config-description {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    .video-list {
+      width: 100%;
+      min-height: 150px;
+      resize: vertical;
+      padding: 0.75rem;
+      border-radius: 4px;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: 'Roboto', sans-serif;
+      font-size: 1.1rem; /* 2pts bigger */
+      margin-bottom: 1rem;
+    }
+
+    .video-list-note {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 3rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    /* Keyboard shortcuts help panel */
+    .shortcuts-panel {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-top: 1rem;
+      text-align: center;
+    }
+
+    /* Media queries */
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem;
+      }
+      
+      .header-controls {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-end;
+      }
+      
+      .video-selector {
+        flex-direction: column;
+      }
+      
+      .slider-button {
+        width: 24px;
+        height: 24px;
+        font-size: 14px;
+      }
+      
+      .video-overlay {
+        font-size: 0.75rem;
+        padding: 6px 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Video Comparison Tool</h1>
+        <p class="subtitle">Compare videos side-by-side with adjustable slider</p>
+      </div>
+      <div class="header-controls">
+        <div class="controls">
+          <button id="play-pause-btn" class="btn">Play</button>
+          <button id="restart-btn" class="btn">Restart</button>
+          <button id="reset-btn" class="btn">Reset</button>
+          <button id="fullscreen-btn" class="btn">Fullscreen</button>
+        </div>
+        <button id="theme-toggle" class="theme-toggle">Toggle Dark Mode</button>
+      </div>
+    </header>
+
+    <div id="video-selector" class="video-selector" style="display: none;">
+      <div class="selector-panel">
+        <h2 class="selector-title">Left Video</h2>
+        <select id="left-video-select" class="video-select">
+          <!-- Options will be populated by JS -->
+        </select>
+        <div id="left-video-info" class="video-info"></div>
+      </div>
+      
+      <div class="selector-panel">
+        <h2 class="selector-title">Right Video</h2>
+        <select id="right-video-select" class="video-select">
+          <!-- Options will be populated by JS -->
+        </select>
+        <div id="right-video-info" class="video-info"></div>
+      </div>
+    </div>
+
+    <div id="video-compare-container">
+      <div class="video-overlay" id="left-video-overlay">Left Video</div>
+      <div class="video-overlay" id="right-video-overlay">Right Video</div>
+      
+      <!-- Right video (background) - removed hardcoded source, added loop -->
+      <video id="right-video" muted loop>
+        <source src="" type="video/mp4">
+      </video>
+      
+      <!-- Clipper with left video - removed hardcoded source, added loop -->
+      <div id="video-clipper">
+        <video id="left-video" muted loop>
+          <source src="" type="video/mp4">
+        </video>
+      </div>
+      
+      <!-- Slider handle -->
+      <div class="slider-handle">
+        <div class="slider-button">↔</div>
+      </div>
+      
+      <!-- Time slider -->
+      <div class="time-slider-container">
+        <input type="range" id="time-slider" min="0" value="0" step="0.1" class="time-slider">
+      </div>
+      
+      <!-- Timer -->
+      <div id="video-timer" class="video-timer">0:00 / 0:00</div>
+    </div>
+    
+    <div class="config-panel">
+      <div class="config-header">
+        <h2 class="config-title">Configure Video List</h2>
+        <div>
+          <button id="load-videos-btn" class="btn">Update Video List</button>
+          <button id="download-html-btn" class="btn">Download Updated HTML</button>
+        </div>
+      </div>
+      <p class="config-description">Enter a list of videos to compare, one per line. Format: URL or file path, followed by an optional comment after a comma.</p>
+      
+      <textarea id="video-list" class="video-list" placeholder="https://example.com/video1.mp4, First video
+https://example.com/video2.mp4, Second video
+/path/to/local/video.mp4, My local video"></textarea>
+      
+      <p class="video-list-note">Tip: Local video files may require using a web server due to browser security restrictions.</p>
+    </div>
+    
+    <footer>
+      <hr>
+      <p style="text-align: center;">©Philippe Dewost, 2025 — @pdewost on LinkedIn, X and Twitter</p>
+    </footer>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Theme switching
+      const body = document.body;
+      const themeToggle = document.getElementById('theme-toggle');
+      
+      themeToggle.addEventListener('click', function() {
+        body.classList.toggle('dark-theme');
+        
+        // Update button text
+        if (body.classList.contains('dark-theme')) {
+          themeToggle.textContent = 'Toggle Light Mode';
+        } else {
+          themeToggle.textContent = 'Toggle Dark Mode';
+        }
+      });
+      
+      // DOM Elements for Video Comparison
+      const container = document.getElementById('video-compare-container');
+      const clipper = document.getElementById('video-clipper');
+      const leftVideo = document.getElementById('left-video');
+      const rightVideo = document.getElementById('right-video');
+      const sliderHandle = document.querySelector('.slider-handle');
+      const playPauseBtn = document.getElementById('play-pause-btn');
+      const resetBtn = document.getElementById('reset-btn');
+      const restartBtn = document.getElementById('restart-btn');
+      const fullscreenBtn = document.getElementById('fullscreen-btn');
+      const leftVideoOverlay = document.getElementById('left-video-overlay');
+      const rightVideoOverlay = document.getElementById('right-video-overlay');
+      
+      // DOM Elements for Video List
+      const videoList = document.getElementById('video-list');
+      const loadVideosBtn = document.getElementById('load-videos-btn');
+      const videoSelector = document.getElementById('video-selector');
+      const leftVideoSelect = document.getElementById('left-video-select');
+      const rightVideoSelect = document.getElementById('right-video-select');
+      const leftVideoInfo = document.getElementById('left-video-info');
+      const rightVideoInfo = document.getElementById('right-video-info');
+      
+      // Click on container to toggle play/pause (but not when clicking on handle)
+      container.addEventListener('click', function(e) {
+        // Don't trigger play/pause if dragging or clicking on handle
+        if (isDragging || e.target === sliderHandle || sliderHandle.contains(e.target)) {
+          return;
+        }
+        
+        togglePlayPause();
+      });
+      
+      // State variables
+      let isDragging = false;
+      let currentPosition = 50; // Default slider position (%)
+      let isPlaying = false;
+      let videos = []; // Will hold all video objects
+      let lastPlayedVideos = { left: 0, right: 1 }; // Track indexes of last played videos
+      let isDraggingTimeSlider = false; // Track if user is dragging the time slider
+      
+      // Store video metadata to avoid duplicate information
+      let videoMetadata = {
+        left: { width: 0, height: 0, duration: 0, size: 0, filename: '', comment: '' },
+        right: { width: 0, height: 0, duration: 0, size: 0, filename: '', comment: '' }
+      };
+      
+      // Function to extract filename without path
+      function getFilenameFromUrl(url) {
+        if (!url) return 'Unknown';
+        
+        // For direct URLs, extract just the filename
+        let filename = url;
+        
+        // Remove everything before the last slash
+        if (url.includes('/')) {
+          filename = url.substring(url.lastIndexOf('/') + 1);
+        }
+        
+        return filename;
+      }
+      
+      // Synchronize videos when one ends with auto-resume
+      function syncVideoEnding() {
+        const leftVideo = document.getElementById('left-video');
+        const rightVideo = document.getElementById('right-video');
+        
+        // With loop attribute, videos will automatically restart
+        // This function now just ensures they stay synchronized
+        if (leftVideo && rightVideo) {
+          // Reset both videos to beginning to ensure sync
+          leftVideo.currentTime = 0;
+          rightVideo.currentTime = 0;
+          
+          // Continue playback if videos were playing
+          if (isPlaying) {
+            leftVideo.play();
+            rightVideo.play();
+          }
+          
+          // Update timer and slider
+          updateTimer();
+        }
+      }
+      
+      // Update video dimensions once loaded - modified to not overwrite existing metadata
+      function updateVideoDimensions() {
+        if (leftVideo && leftVideo.videoWidth) {
+          // Only update if we don't already have the data
+          if (!videoMetadata.left.width || !videoMetadata.left.height) {
+            const width = leftVideo.videoWidth;
+            const height = leftVideo.videoHeight;
+            const duration = leftVideo.duration || 0;
+            const filename = getFilenameFromUrl(leftVideo.querySelector('source').src);
+            
+            videoMetadata.left.width = width;
+            videoMetadata.left.height = height;
+            videoMetadata.left.duration = duration;
+            
+            // Only update filename if not already set
+            if (!videoMetadata.left.filename) {
+              videoMetadata.left.filename = filename;
+            }
+            
+            updateVideoOverlay('left');
+            
+            // Fetch file size for left video if we don't already have it
+            if (!videoMetadata.left.size) {
+              updateVideoFileSize(leftVideo.querySelector('source').src, 'left');
+            }
+          }
+        }
+        
+        if (rightVideo && rightVideo.videoWidth) {
+          // Only update if we don't already have the data
+          if (!videoMetadata.right.width || !videoMetadata.right.height) {
+            const width = rightVideo.videoWidth;
+            const height = rightVideo.videoHeight;
+            const duration = rightVideo.duration || 0;
+            const filename = getFilenameFromUrl(rightVideo.querySelector('source').src);
+            
+            videoMetadata.right.width = width;
+            videoMetadata.right.height = height;
+            videoMetadata.right.duration = duration;
+            
+            // Only update filename if not already set
+            if (!videoMetadata.right.filename) {
+              videoMetadata.right.filename = filename;
+            }
+            
+            updateVideoOverlay('right');
+            
+            // Fetch file size for right video if we don't already have it
+            if (!videoMetadata.right.size) {
+              updateVideoFileSize(rightVideo.querySelector('source').src, 'right');
+            }
+          }
+        }
+      }
+      
+      // Update video overlay with complete information
+      function updateVideoOverlay(position) {
+        const metadata = videoMetadata[position];
+        const overlay = position === 'left' ? leftVideoOverlay : rightVideoOverlay;
+        
+        if (!metadata.filename) return;
+        
+        let infoText = metadata.filename;
+        
+        // Add dimensions if available
+        if (metadata.width && metadata.height) {
+          infoText += ` [${metadata.width}×${metadata.height}]`;
+        }
+        
+        // Add duration if available
+        if (metadata.duration) {
+          infoText += ` ${Math.round(metadata.duration)}s`;
+        }
+        
+        // Add file size if available
+        if (metadata.size) {
+          infoText += ` ${metadata.size.toFixed(2)}MB`;
+        }
+        
+        // Add comment with line break if available
+        if (metadata.comment) {
+          infoText += `\n${metadata.comment}`;
+        }
+        
+        // Use innerHTML to handle line breaks
+        overlay.innerHTML = infoText.replace(/\n/g, '<br>');
+      }
+      
+      // Helper function to fetch and update file size
+      async function updateVideoFileSize(url, position) {
+        try {
+          const response = await fetch(url, { method: 'HEAD' });
+          if (response.ok) {
+            const sizeBytes = response.headers.get('content-length');
+            if (sizeBytes) {
+              // Ensure we parse as a number and calculate correctly
+              const sizeMB = parseFloat(sizeBytes) / (1024 * 1024);
+              videoMetadata[position].size = sizeMB;
+              updateVideoOverlay(position);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching file size:', error);
+        }
+      }
+      
+      // Preload video metadata when a video is selected (before loading)
+      async function preloadVideoMetadata(videoObj, position) {
+        return new Promise(async (resolve) => {
+          const filename = getFilenameFromUrl(videoObj.url);
+          
+          // Create a temporary video element to get metadata
+          const tempVideo = document.createElement('video');
+          tempVideo.preload = 'metadata';
+          tempVideo.style.display = 'none';
+          
+          // Set up event listeners
+          tempVideo.onloadedmetadata = function() {
+            // Update metadata object
+            videoMetadata[position].width = tempVideo.videoWidth;
+            videoMetadata[position].height = tempVideo.videoHeight;
+            videoMetadata[position].duration = tempVideo.duration;
+            
+            // Remove temporary element
+            document.body.removeChild(tempVideo);
+            
+            // Update display
+            updateVideoOverlay(position);
+            resolve();
+          };
+          
+          // Handle errors
+          tempVideo.onerror = function() {
+            console.error('Error loading video metadata');
+            document.body.removeChild(tempVideo);
+            resolve();
+          };
+          
+          // Add to DOM and start loading
+          document.body.appendChild(tempVideo);
+          tempVideo.src = videoObj.url;
+        });
+      }
+      
+      // Show black screen with message when videos can't be loaded
+      function showNoVideosMessage() {
+        container.innerHTML = '';
+        container.style.backgroundColor = '#000';
+        const errorMessage = document.createElement('div');
+        errorMessage.style.position = 'absolute';
+        errorMessage.style.top = '50%';
+        errorMessage.style.left = '50%';
+        errorMessage.style.transform = 'translate(-50%, -50%)';
+        errorMessage.style.color = 'white';
+        errorMessage.style.fontSize = '18px';
+        errorMessage.style.textAlign = 'center';
+        errorMessage.style.width = '80%';
+        errorMessage.innerHTML = 'No videos available for comparison.<br><br>Please check or update the video list at the bottom of the page.';
+        container.appendChild(errorMessage);
+      }
+      
+      // Load videos from the textarea
+      loadVideosBtn.addEventListener('click', function() {
+        const lines = videoList.value.trim().split('\n');
+        
+        if (lines.length < 2) {
+          alert('Please enter at least two videos to compare.');
+          return;
+        }
+        
+        // Parse video entries
+        videos = lines.map((line, index) => {
+          const parts = line.split(',');
+          const url = parts[0].trim();
+          const comment = parts.length > 1 ? parts[1].trim() : '';
+          const filename = getFilenameFromUrl(url);
+          
+          return {
+            id: index,
+            url: url,
+            comment: comment,
+            filename: filename,
+            displayName: comment ? `${filename} (${comment})` : filename
+          };
+        });
+        
+        // If only 2 videos, load them directly
+        if (videos.length === 2) {
+          loadVideoComparison(videos[0], videos[1]);
+          return;
+        }
+        
+        // Otherwise, show selector UI
+        populateVideoSelectors();
+        videoSelector.style.display = 'flex';
+        
+        // Use the last played videos indexes if they're within range
+        const leftIndex = (lastPlayedVideos.left < videos.length) ? lastPlayedVideos.left : 0;
+        const rightIndex = (lastPlayedVideos.right < videos.length) ? lastPlayedVideos.right : (videos.length > 1 ? 1 : 0);
+        
+        // Update the selected values in the dropdowns
+        leftVideoSelect.value = leftIndex;
+        rightVideoSelect.value = rightIndex;
+        
+        // Update video info for the selected (last played) videos
+        updateVideoInfo(videos[leftIndex], 'left');
+        updateVideoInfo(videos[rightIndex], 'right');
+        
+        // Update the download button
+        updateDownloadButton();
+      });
+      
+      // Populate selector dropdowns
+      function populateVideoSelectors() {
+        // Clear existing options
+        leftVideoSelect.innerHTML = '';
+        rightVideoSelect.innerHTML = '';
+        
+        // Add options for each video
+        videos.forEach(video => {
+          const leftOption = document.createElement('option');
+          leftOption.value = video.id;
+          leftOption.textContent = video.displayName;
+          leftVideoSelect.appendChild(leftOption);
+          
+          const rightOption = document.createElement('option');
+          rightOption.value = video.id;
+          rightOption.textContent = video.displayName;
+          rightVideoSelect.appendChild(rightOption);
+        });
+        
+        // Use last played videos if available, otherwise use first two videos
+        if (lastPlayedVideos.left < videos.length) {
+          leftVideoSelect.value = lastPlayedVideos.left;
+        } else {
+          leftVideoSelect.value = 0;
+          // Update lastPlayedVideos to match
+          lastPlayedVideos.left = 0;
+        }
+        
+        if (lastPlayedVideos.right < videos.length && lastPlayedVideos.right !== lastPlayedVideos.left) {
+          rightVideoSelect.value = lastPlayedVideos.right;
+        } else if (videos.length > 1) {
+          // Use second video by default or first different video
+          if (lastPlayedVideos.left === 0) {
+            rightVideoSelect.value = 1;
+            lastPlayedVideos.right = 1;
+          } else {
+            rightVideoSelect.value = 0;
+            lastPlayedVideos.right = 0;
+          }
+        } else {
+          // If only one video, use it for both
+          rightVideoSelect.value = 0;
+          lastPlayedVideos.right = 0;
+        }
+        
+        // Add change event listeners with full preloading
+        leftVideoSelect.addEventListener('change', function() {
+          const selectedVideo = videos[this.value];
+          updateVideoInfo(selectedVideo, 'left');
+        });
+        
+        rightVideoSelect.addEventListener('change', function() {
+          const selectedVideo = videos[this.value];
+          updateVideoInfo(selectedVideo, 'right');
+        });
+        
+        // Remove existing load button if it exists
+        const existingLoadBtn = document.getElementById('load-selected-btn');
+        if (existingLoadBtn) {
+          existingLoadBtn.remove();
+        }
+        
+        // Add button to load the selected videos
+        const loadSelectedBtn = document.createElement('button');
+        loadSelectedBtn.textContent = 'Load Selected Videos';
+        loadSelectedBtn.className = 'btn';
+        loadSelectedBtn.id = 'load-selected-btn'; // Add ID for easy reference
+        
+        loadSelectedBtn.addEventListener('click', function() {
+          const leftVideoObj = videos[leftVideoSelect.value];
+          const rightVideoObj = videos[rightVideoSelect.value];
+          
+          // Update lastPlayedVideos immediately to ensure persistence
+          lastPlayedVideos.left = parseInt(leftVideoSelect.value);
+          lastPlayedVideos.right = parseInt(rightVideoSelect.value);
+          
+          // Pass the current metadata along with the video objects
+          const leftMetadata = {...videoMetadata.left};
+          const rightMetadata = {...videoMetadata.right};
+          
+          loadVideoComparison(leftVideoObj, rightVideoObj, leftMetadata, rightMetadata);
+        });
+        
+        // Add to either selector panel
+        const leftPanel = leftVideoSelect.parentNode;
+        leftPanel.appendChild(loadSelectedBtn);
+      }
+      
+      // Update video info in the selector
+      async function updateVideoInfo(video, position) {
+        const infoElement = position === 'left' ? leftVideoInfo : rightVideoInfo;
+        
+        // Start with filename
+        const filename = getFilenameFromUrl(video.url);
+        infoElement.innerHTML = `<strong>${filename}</strong><br>`;
+        
+        // Show loading message while fetching info
+        infoElement.innerHTML += 'Loading file info...';
+        
+        // Update basic metadata 
+        videoMetadata[position].filename = filename;
+        videoMetadata[position].comment = video.comment || '';
+        updateVideoOverlay(position);
+        
+        // Fetch size
+        try {
+          const response = await fetch(video.url, { method: 'HEAD' });
+          if (response.ok) {
+            const sizeBytes = response.headers.get('content-length');
+            if (sizeBytes) {
+              const sizeMB = (sizeBytes / (1024 * 1024));
+              
+              // Update metadata
+              videoMetadata[position].size = sizeMB;
+              updateVideoOverlay(position);
+              
+              // Update info element
+              infoElement.innerHTML = `<strong>${filename}</strong><br>`;
+              infoElement.innerHTML += `Size: ${sizeMB.toFixed(2)} MB<br>`;
+              
+              // Add comment as the description on a new line
+              if (video.comment) {
+                infoElement.innerHTML += `${video.comment}`;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching file size:', error);
+          infoElement.innerHTML = `<strong>${filename}</strong><br>`;
+          if (video.comment) {
+            infoElement.innerHTML += `${video.comment}`;
+          }
+        }
+        
+        // Preload video metadata (dimensions, duration)
+        await preloadVideoMetadata(video, position);
+      }
+      
+      // Function to create or update the download button
+      function updateDownloadButton() {
+        const downloadBtn = document.getElementById('download-html-btn');
+        
+        if (!downloadBtn) {
+          return; // Button already exists in HTML
+        }
+        
+        // Add the click event to download updated HTML
+        downloadBtn.addEventListener('click', function() {
+          // Get the current HTML content
+          let htmlContent = document.documentElement.outerHTML;
+          
+          // Update the textarea content in the HTML
+          const updatedVideoList = document.getElementById('video-list').value;
+          const videoListRegex = /(videoList\.value\s*=\s*`)([\s\S]*?)(`\s*;)/;
+          htmlContent = htmlContent.replace(videoListRegex, function(match, p1, p2, p3) {
+            return p1 + updatedVideoList + p3;
+          });
+          
+          // Create a Blob with the updated HTML content
+          const blob = new Blob([htmlContent], { type: 'text/html' });
+          
+          // Create a download link and trigger the download
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = 'video-comparison-tool.html';
+          link.click();
+          
+          // Clean up
+          URL.revokeObjectURL(link.href);
+        });
+      }
+      
+      // Load the selected videos for comparison
+      function loadVideoComparison(leftVideoObj, rightVideoObj, savedLeftMetadata, savedRightMetadata) {
+        // Hide selector if it was shown
+        videoSelector.style.display = 'none';
+        
+        // Create new video elements with sync behavior
+        const newLeftVideo = document.createElement('video');
+        newLeftVideo.id = 'left-video';
+        newLeftVideo.loop = true; // Add loop attribute
+        newLeftVideo.muted = true;
+        newLeftVideo.style.width = '200%';
+        newLeftVideo.innerHTML = `<source src="${leftVideoObj.url}" type="video/mp4">`;
+        
+        const newRightVideo = document.createElement('video');
+        newRightVideo.id = 'right-video';
+        newRightVideo.loop = true; // Add loop attribute
+        newRightVideo.muted = true;
+        newRightVideo.innerHTML = `<source src="${rightVideoObj.url}" type="video/mp4">`;
+        
+        // Replace current videos
+        clipper.innerHTML = '';
+        clipper.appendChild(newLeftVideo);
+        
+        const oldRightVideo = document.getElementById('right-video');
+        container.replaceChild(newRightVideo, oldRightVideo);
+        
+        // Update references
+        const updatedLeftVideo = document.getElementById('left-video');
+        const updatedRightVideo = document.getElementById('right-video');
+        
+        // If we have saved metadata from selection, use it
+        if (savedLeftMetadata) {
+          videoMetadata.left = savedLeftMetadata;
+        } else {
+          // Otherwise, reset and get basic metadata
+          videoMetadata.left.filename = getFilenameFromUrl(leftVideoObj.url);
+          videoMetadata.left.comment = leftVideoObj.comment || '';
+        }
+        
+        if (savedRightMetadata) {
+          videoMetadata.right = savedRightMetadata;
+        } else {
+          // Otherwise, reset and get basic metadata
+          videoMetadata.right.filename = getFilenameFromUrl(rightVideoObj.url);
+          videoMetadata.right.comment = rightVideoObj.comment || '';
+        }
+        
+        // Update overlays with current metadata
+        updateVideoOverlay('left');
+        updateVideoOverlay('right');
+        
+        // Clear any existing timer interval
+        if (updateTimerInterval) {
+          clearInterval(updateTimerInterval);
+        }
+        
+        // Initialize timer and time slider once both videos have loaded
+        const initTimeControls = function() {
+          if (updatedLeftVideo.readyState >= 1 && updatedRightVideo.readyState >= 1) {
+            initializeTimeSlider();
+            updateTimer();
+            
+            // If both videos have successfully loaded metadata, remove the listeners
+            updatedLeftVideo.removeEventListener('loadedmetadata', initTimeControls);
+            updatedRightVideo.removeEventListener('loadedmetadata', initTimeControls);
+          }
+        };
+        
+        // Add the event listeners
+        updatedLeftVideo.addEventListener('loadedmetadata', initTimeControls);
+        updatedRightVideo.addEventListener('loadedmetadata', initTimeControls);
+        
+        // Add timeupdate listeners to keep the slider and timer in sync
+        updatedLeftVideo.addEventListener('timeupdate', function() {
+          if (!isDraggingTimeSlider) {
+            updateTimer();
+          }
+        });
+        
+        // We'll still need video dimensions, but we'll avoid overwriting existing metadata
+        updatedLeftVideo.addEventListener('loadeddata', function() {
+          // Only update if we don't already have the data
+          if (!videoMetadata.left.width || !videoMetadata.left.height) {
+            videoMetadata.left.width = updatedLeftVideo.videoWidth;
+            videoMetadata.left.height = updatedLeftVideo.videoHeight;
+            videoMetadata.left.duration = updatedLeftVideo.duration || 0;
+            updateVideoOverlay('left');
+          }
+        });
+        
+        updatedRightVideo.addEventListener('loadeddata', function() {
+          // Only update if we don't already have the data
+          if (!videoMetadata.right.width || !videoMetadata.right.height) {
+            videoMetadata.right.width = updatedRightVideo.videoWidth;
+            videoMetadata.right.height = updatedRightVideo.videoHeight;
+            videoMetadata.right.duration = updatedRightVideo.duration || 0;
+            updateVideoOverlay('right');
+          }
+        });
+        
+        // Add video synchronization event listeners
+        updatedLeftVideo.addEventListener('ended', syncVideoEnding);
+        updatedRightVideo.addEventListener('ended', syncVideoEnding);
+        
+        // Update the last played videos
+        lastPlayedVideos.left = parseInt(leftVideoSelect.value);
+        lastPlayedVideos.right = parseInt(rightVideoSelect.value);
+        
+        // Reset to default state
+        resetSlider();
+        isPlaying = false;
+        playPauseBtn.textContent = 'Play';
+        
+        // Add a slight delay to make sure videos are ready before restarting
+        setTimeout(function() {
+          // Restart both videos to align on first frame
+          restartVideos();
+        }, 200);
+      }
+      
+      // Function to dynamically load initial videos from the list
+      function loadInitialVideos() {
+        // Initially hide the video-compare-container and show a loading message
+        const loadingMessage = document.createElement('div');
+        loadingMessage.style.position = 'absolute';
+        loadingMessage.style.top = '50%';
+        loadingMessage.style.left = '50%';
+        loadingMessage.style.transform = 'translate(-50%, -50%)';
+        loadingMessage.style.color = 'white';
+        loadingMessage.style.fontSize = '18px';
+        loadingMessage.textContent = 'Loading videos...';
+        container.style.backgroundColor = '#000';
+        container.appendChild(loadingMessage);
+        
+        // Parse the initial video list and load the first two videos
+        const lines = videoList.value.trim().split('\n');
+        
+        // Parse video entries
+        if (lines.length >= 2) {
+          videos = lines.map((line, index) => {
+            const parts = line.split(',');
+            const url = parts[0].trim();
+            const comment = parts.length > 1 ? parts[1].trim() : '';
+            const filename = getFilenameFromUrl(url);
+            
+            return {
+              id: index,
+              url: url,
+              comment: comment,
+              filename: filename,
+              displayName: comment ? `${filename} (${comment})` : filename
+            };
+          });
+          
+          // Load the first two videos if available
+          if (videos.length >= 2) {
+            loadVideoComparison(videos[0], videos[1]);
+          } else if (videos.length === 1) {
+            // If only one video, use it for both sides
+            loadVideoComparison(videos[0], videos[0]);
+          } else {
+            showNoVideosMessage();
+          }
+        } else {
+          showNoVideosMessage();
+        }
+        
+        // Initialize the download button
+        updateDownloadButton();
+      }
+      
+      // Track mouse movement for slider
+      function trackLocation(e) {
+        const rect = container.getBoundingClientRect();
+        const position = ((e.clientX - rect.left) / container.offsetWidth) * 100;
+        
+        if (position >= 0 && position <= 100) {
+          currentPosition = position;
+          
+          // Update clipper width
+          clipper.style.width = position + "%";
+          
+          // Update clipped video width to maintain position
+          const leftVideo = document.getElementById('left-video');
+          if (leftVideo && position > 0) {
+            leftVideo.style.width = ((100 / position) * 100) + "%";
+          }
+          
+          // Update slider handle position
+          sliderHandle.style.left = position + "%";
+        }
+      }
+      
+      // Function to format time in MM:SS format
+      function formatTime(seconds) {
+        if (!seconds || isNaN(seconds) || seconds === Infinity) return "0:00";
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+      }
+      
+      // Update the timer display
+      function updateTimer() {
+        const leftVideo = document.getElementById('left-video');
+        const rightVideo = document.getElementById('right-video');
+        const timerElement = document.getElementById('video-timer');
+        const timeSlider = document.getElementById('time-slider');
+        
+        if (!leftVideo || !rightVideo || !timerElement) return;
+        
+        // Get the shortest duration more reliably
+        const leftDuration = isFinite(leftVideo.duration) ? leftVideo.duration : Infinity;
+        const rightDuration = isFinite(rightVideo.duration) ? rightVideo.duration : Infinity;
+        const shortestDuration = Math.min(leftDuration, rightDuration);
+        
+        // If we don't have valid durations yet, exit
+        if (shortestDuration === Infinity) {
+          timerElement.textContent = "0:00 / 0:00";
+          return;
+        }
+        
+        // Get the current time (they should be synced, but let's use the left video)
+        const currentTime = leftVideo.currentTime;
+        
+        // Update the timer display with the shortest duration
+        timerElement.textContent = `${formatTime(currentTime)} / ${formatTime(shortestDuration)}`;
+        
+        // Update time slider max value if needed
+        if (timeSlider && parseFloat(timeSlider.max) !== shortestDuration) {
+          timeSlider.max = shortestDuration;
+        }
+        
+        // Update time slider value if not being dragged
+        if (timeSlider && !isDraggingTimeSlider) {
+          timeSlider.value = currentTime;
+        }
+      }
+      
+      // Play/Pause functionality
+      playPauseBtn.addEventListener('click', togglePlayPause);
+      
+      function togglePlayPause() {
+        isPlaying = !isPlaying;
+        
+        const leftVideo = document.getElementById('left-video');
+        const rightVideo = document.getElementById('right-video');
+        
+        if (isPlaying) {
+          playPauseBtn.textContent = 'Pause';
+          if (leftVideo) leftVideo.play();
+          if (rightVideo) rightVideo.play();
+          
+          // Start timer updates when playing
+          updateTimerInterval = setInterval(updateTimer, 250);
+        } else {
+          playPauseBtn.textContent = 'Play';
+          if (leftVideo) leftVideo.pause();
+          if (rightVideo) rightVideo.pause();
+          
+          // Stop timer updates when paused
+          clearInterval(updateTimerInterval);
+          updateTimer(); // Final update to ensure display is correct
+        }
+      }
+      
+      // Initialize time slider functionality
+      function initializeTimeSlider() {
+        const timeSlider = document.getElementById('time-slider');
+        const leftVideo = document.getElementById('left-video');
+        const rightVideo = document.getElementById('right-video');
+        
+        if (!timeSlider || !leftVideo || !rightVideo) return;
+        
+        // Set initial max value to the shortest duration
+        if (leftVideo.duration && rightVideo.duration) {
+          const shortestDuration = Math.min(leftVideo.duration, rightVideo.duration);
+          timeSlider.max = shortestDuration;
+        }
+        
+        // Add event listeners for the time slider
+        timeSlider.addEventListener('mousedown', function() {
+          isDraggingTimeSlider = true;
+          if (isPlaying) {
+            leftVideo.pause();
+            rightVideo.pause();
+          }
+        });
+        
+        timeSlider.addEventListener('mouseup', function() {
+          isDraggingTimeSlider = false;
+          if (isPlaying) {
+            leftVideo.play();
+            rightVideo.play();
+          }
+        });
+        
+        timeSlider.addEventListener('input', function() {
+          const seekTime = parseFloat(timeSlider.value);
+          if (leftVideo) leftVideo.currentTime = seekTime;
+          if (rightVideo) rightVideo.currentTime = seekTime;
+          updateTimer();
+        });
+        
+        // Update timer immediately
+        updateTimer();
+      }
+      
+      // Variable to store the interval ID for timer updates
+      let updateTimerInterval;
+      
+      // Reset slider to middle
+      resetBtn.addEventListener('click', resetSlider);
+      
+      function resetSlider() {
+        currentPosition = 50;
+        
+        // Update clipper width
+        clipper.style.width = currentPosition + "%";
+        
+        // Update clipped video width
+        const leftVideo = document.getElementById('left-video');
+        if (leftVideo) {
+          leftVideo.style.width = "200%";
+          leftVideo.style.left = "0";
+        }
+        
+        // Update slider handle position
+        sliderHandle.style.left = currentPosition + "%";
+      }
+      
+      // Restart videos from beginning
+      restartBtn.addEventListener('click', restartVideos);
+      
+      function restartVideos() {
+        const leftVideo = document.getElementById('left-video');
+        const rightVideo = document.getElementById('right-video');
+        
+        if (leftVideo) {
+          leftVideo.currentTime = 0;
+          if (isPlaying) leftVideo.play();
+        }
+        
+        if (rightVideo) {
+          rightVideo.currentTime = 0;
+          if (isPlaying) rightVideo.play();
+        }
+        
+        // Update timer and slider
+        updateTimer();
+      }
+      
+      // Fullscreen toggle
+      fullscreenBtn.addEventListener('click', toggleFullscreen);
+      
+      function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+          container.requestFullscreen().catch(err => {
+            console.error(`Error attempting to enable fullscreen: ${err.message}`);
+          });
+        } else {
+          document.exitFullscreen();
+        }
+      }
+      
+      // Slider drag functionality
+      sliderHandle.addEventListener('mousedown', startDrag);
+      document.addEventListener('mouseup', stopDrag);
+      
+      // Touch support
+      sliderHandle.addEventListener('touchstart', startTouch, { passive: false });
+      document.addEventListener('touchend', stopDrag);
+      
+      // Mouse/touch events for slider
+      container.addEventListener('mousemove', function(e) {
+        if (isDragging) {
+          trackLocation(e);
+        }
+      });
+      
+      container.addEventListener('touchmove', function(e) {
+        if (isDragging && e.touches.length > 0) {
+          e.preventDefault();
+          const touchObj = e.touches[0];
+          trackLocation({ clientX: touchObj.clientX });
+        }
+      }, { passive: false });
+      
+      function startDrag(e) {
+        e.preventDefault();
+        isDragging = true;
+        container.style.cursor = 'col-resize';
+        
+        // Get initial position from the clicked point
+        trackLocation(e);
+      }
+      
+      function startTouch(e) {
+        e.preventDefault();
+        isDragging = true;
+        container.style.cursor = 'col-resize';
+        
+        // Get initial position from the touched point
+        if (e.touches.length > 0) {
+          const touchObj = e.touches[0];
+          trackLocation({ clientX: touchObj.clientX });
+        }
+      }
+      
+      function stopDrag() {
+        isDragging = false;
+        container.style.cursor = 'default';
+      }
+      
+      // Add keyboard controls
+      document.addEventListener('keydown', function(e) {
+        // Check if an input element is currently focused
+        const activeElement = document.activeElement;
+        const isInputActive = activeElement.tagName === 'TEXTAREA' || 
+                             activeElement.tagName === 'INPUT' || 
+                             activeElement.isContentEditable;
+        
+        // Only process keyboard shortcuts if we're not in an input field
+        if (!isInputActive) {
+          // Space key for play/pause
+          if (e.code === 'Space') {
+            e.preventDefault(); // Prevent page scrolling
+            togglePlayPause();
+          }
+          
+          // Home key for restart
+          if (e.code === 'Home') {
+            e.preventDefault();
+            restartVideos();
+          }
+        }
+      });
+      
+      // Initialize by loading videos from the list
+      document.addEventListener('DOMContentLoaded', function() {
+        // Load videos from the list
+        loadInitialVideos();
+      });
+      
+      // Load videos on page load
+      loadInitialVideos();
+      
+      // Example list of videos
+      videoList.value = `ballmer monkey dance 236x176 aligned.mp4,Steve Ballmer famous Monkey Dance (found on YouTube)
+ballmer monkey dance_starlight.mp4,Topaz Starlight - cloud beta
+ballmer monkey dance_prob4.mp4,Topaz Proteus enhancement - local
+Pub France Telecom 1996 - Le Soleil-240p-trim.mp4,France Telecom 2000 ad (small)
+Pub France Telecom 1996 - Le Soleil_starlight.mp4,Topaz Starlight - cloud beta`;
+    });
+  </script>
+</body>
+</html>

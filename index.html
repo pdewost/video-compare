@@ -1,15 +1,10 @@
-<!DOCTYPE html>
-<!--
-  ©Philippe Dewost, 2025 — inspired by @chenyuntc, refined and enhanced with the help of Claude Sonnet 3.7
--->
-<html lang="en">
-<head>
+<html lang="en"><head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Enhanced Video Comparison Tool</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&amp;display=swap" rel="stylesheet">
   <style>
     :root {
       /* Light theme (default) */
@@ -456,19 +451,19 @@
       </div>
     </div>
 
-    <div id="video-compare-container">
-      <div class="video-overlay" id="left-video-overlay">Left Video</div>
-      <div class="video-overlay" id="right-video-overlay">Right Video</div>
+    <div id="video-compare-container" style="background-color: rgb(0, 0, 0); cursor: default;">
+      <div class="video-overlay" id="left-video-overlay">ballmer monkey dance 236x176 aligned.mp4<br>Steve Ballmer famous Monkey Dance (found on YouTube)</div>
+      <div class="video-overlay" id="right-video-overlay">ballmer monkey dance_starlight.mp4<br>Topaz Starlight - cloud beta</div>
       
       <!-- Right video (background) - removed hardcoded source, added loop -->
-      <video id="right-video" muted loop>
-        <source src="" type="video/mp4">
+      <video id="right-video" muted="" loop="">
+        <source src="ballmer monkey dance_starlight.mp4" type="video/mp4">
       </video>
       
       <!-- Clipper with left video - removed hardcoded source, added loop -->
       <div id="video-clipper">
-        <video id="left-video" muted loop>
-          <source src="" type="video/mp4">
+        <video id="left-video" muted="" loop="">
+          <source src="ballmer monkey dance 236x176 aligned.mp4" type="video/mp4">
         </video>
       </div>
       
@@ -484,7 +479,7 @@
       
       <!-- Timer -->
       <div id="video-timer" class="video-timer">0:00 / 0:00</div>
-    </div>
+    <div id="loading-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 18px;">Loading videos...</div></div>
     
     <div class="config-panel">
       <div class="config-header">
@@ -1558,20 +1553,42 @@ https://example.com/video2.mp4, Second video
         }
       });
       
-      // We'll load the videos after setting up the initial video list
-      // Don't call loadInitialVideos() here - it's already being called inside DOMContentLoaded
-      
-      // Example list of videos - set the list value first
-      videoList.value = `ballmer monkey dance 236x176 aligned.mp4,Steve Ballmer famous Monkey Dance (found on YouTube)
-ballmer monkey dance_starlight.mp4,Topaz Starlight - cloud beta
-ballmer monkey dance_prob4.mp4,Topaz Proteus enhancement - local
-Pub France Telecom 1996 - Le Soleil-240p-trim.mp4,France Telecom 2000 ad (small)
-Pub France Telecom 1996 - Le Soleil_starlight.mp4,Topaz Starlight - cloud beta`;
-      
-      // Now load the initial videos from the list
+      // ---------------------------------------------------------------------------
+      // URL-hash driven loading  (hash works with file:// URLs; query-string does not)
+      // Usage: open the HTML with #left=PATH&right=PATH in the fragment.
+      //   Optional labels: &ll=Left+label&rl=Right+label
+      // Example (shell):
+      //   open "file:///path/to/video-comparison-tool.html\
+      //     #left=/path/to/A.mp4&ll=Version+A\
+      //     &right=/path/to/B.mp4&rl=Version+B"
+      // ---------------------------------------------------------------------------
+      (function applyUrlParams() {
+        const hash = window.location.hash.slice(1); // strip leading '#'
+        const p = new URLSearchParams(hash);
+        const left  = p.get('left');
+        const right = p.get('right');
+        if (left && right) {
+          const ll = p.get('ll') || p.get('left_label')  || '';
+          const rl = p.get('rl') || p.get('right_label') || '';
+          videoList.value =
+            left  + (ll ? ', ' + ll : '') + '\n' +
+            right + (rl ? ', ' + rl : '');
+          console.log('URL params loaded:', left, '|', right);
+        } else {
+          // Fallback: Pub France Telecom 1996 comparison set (edit as needed)
+          videoList.value = [
+            '/Users/pdewost/Movies/Media Archive Library/business/Wanadoo/Pub France Telecom 1996 - Le Soleil-960p_starlight_iris2-4K.m4v, Starlight → Iris-2 · 4K (2-pass 2025)',
+            '/Users/pdewost/Movies/Media Archive Library/variants/topaz-tests/Pub France Telecom 1996 - Le Soleil_tx-iris3-1080p-2026.mp4, Iris-3 direct · 1280×960 (1-pass 2026)',
+            '/Users/pdewost/Movies/Media Archive Library/business/Wanadoo/Pub France Telecom 1996 - Le Soleil-576p_iris2.mp4, Iris-2 · 576p (2024)',
+            '/Users/pdewost/Movies/Media Archive Library/business/Wanadoo/Pub France Telecom 1996 - Le Soleil-240p.mp4, Source · 320×240 (original)',
+          ].join('\n');
+        }
+      })();
+
+      // Now load the initial videos from the list (first two entries are auto-loaded)
       console.log("Starting initial video loading sequence");
       loadInitialVideos();
     });
   </script>
-</body>
-</html>
+
+</body></html>
